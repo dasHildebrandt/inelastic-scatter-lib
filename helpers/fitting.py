@@ -8,18 +8,17 @@ image. COM and fit data could be used to estimate the conversion factor between
 reciprocal and pixel space.
 """
 
-import sys, configparser
 from PIL import Image
 import numpy as np
 import pylab as plt
-import tqdm
 import scipy.optimize as opt
 import os
 import math as m
 import scipy.io as sio
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from inPho_mod import center_of_mass as com
+
+from helpers.tools import center_of_mass
 
 
 def pseudoVoigt2D_surfBG(
@@ -28,13 +27,13 @@ def pseudoVoigt2D_surfBG(
         etax: float,
         x0: float, 
         sx: float,
-        y0:float, 
+        y0: float, 
         sy: float, 
         BGA1: float, 
         BGA2: float, 
         BGb: float
-):
-    """Fit function of a two dimensional Pseudo-Voigt function """
+)-> np.ndarray: 
+    """Two dimensional Pseudo-Voigt function """
     (xgrid, ygrid) = xdata_tuple
     z = amp*( (1-etax) * np.exp( -np.log(2)*(np.power(((xgrid-x0)/(2*sx)),2) + \
         np.power(((ygrid-y0)/(2*sy)),2) )) + etax/(1 + np.power(((xgrid-x0)/(2*sx)),2) \
@@ -42,9 +41,9 @@ def pseudoVoigt2D_surfBG(
     z = z + BGA1*xgrid + BGA2*ygrid + BGb
     return z.ravel()
 
-#This is a function I used to visualize my fit quality.
 
 def plot_comp_fit_exp(x, y, peak1, z, save = False, savename = '', path_fits = 'my_path'):
+    """This is a function I used to visualize my fit quality."""
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2,figsize = (6, 4))
 
     ax1.set_title('Experiment')
@@ -141,7 +140,7 @@ for jj in range(1,len(ps)):
     plt.imshow(peak) 
     plt.show()  
     
-    xpos,ypos=com(peak,x,y)
+    xpos,ypos=center_of_mass(peak,x,y)
     print(str(xpos)+'  '+str(ypos))
     
     comtxt.writelines(str(xpos)+'\t'+str(ypos)+'\n')
