@@ -10,7 +10,6 @@ reciprocal and pixel space.
 
 from PIL import Image
 import numpy as np
-import pylab as plt
 import scipy.optimize as opt
 import os
 import math as m
