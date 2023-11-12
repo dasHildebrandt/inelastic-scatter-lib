@@ -1,0 +1,10 @@
+scikit-ued
+numpy
+scipy
+multiprocessing
+crystals
+pickle
+ase
+matplotlib
+psutil
+python-dotenv
