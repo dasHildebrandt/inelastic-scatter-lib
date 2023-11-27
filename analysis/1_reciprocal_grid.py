@@ -20,7 +20,7 @@ from helpers import fitting
 from helpers.tools import center_of_mass, correct_image
 
 # %%
-image_file = os.path.join(DATA_DIR, "meas2//meas2_0015.tif")
+image_file = os.path.join(DATA_DIR, "meas2/meas2_0015.tif")
 background_file = os.path.join(DATA_DIR,"laser_background/meas1_0039.tif")
 flatfield_file = os.path.join(DATA_DIR,"20180808_flatfield_improved_without_bad_pixel_mask.mat")
 peak_positions_filepath = os.path.join(DATA_DIR, "peak_selection_large.txt")
