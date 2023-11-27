@@ -20,11 +20,9 @@ from helpers import fitting
 from helpers.tools import center_of_mass, correct_image
 
 # %%
-image_file = "C:/Users/patri/Documents/Topfloor/20190502/meas2/meas2_0015.tif"
-background_file = (
-    "C:/Users/patri/Documents/Topfloor/20190502/meas2/laser_background/meas1_0039.tif"
-)
-flatfield_file = "C:/Users/patri/Documents/Topfloor/20180808_flatfield_improved_without_bad_pixel_mask.mat"
+image_file = os.path.join(DATA_DIR, "meas2//meas2_0015.tif")
+background_file = os.path.join(DATA_DIR,"laser_background/meas1_0039.tif")
+flatfield_file = os.path.join(DATA_DIR,"20180808_flatfield_improved_without_bad_pixel_mask.mat")
 peak_positions_filepath = os.path.join(DATA_DIR, "peak_selection_large.txt")
 peak_positions = pd.read_csv(peak_positions_filepath, sep="\t")
 
@@ -57,6 +55,8 @@ for index, peak in peak_positions.iterrows():
     xpos, ypos = center_of_mass(peak_image, x, y)
 
     peak_positions.loc[index, "x_result"] = xpos
-    peak_positions.loc[index, "x_result"] = ypos
+    peak_positions.loc[index, "y_result"] = ypos
 
 peak_positions.to_csv(os.path.join(DATA_DIR, "peak_positions.csv"))
+
+
