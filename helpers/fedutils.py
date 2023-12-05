@@ -7,24 +7,26 @@ import tqdm
 import skued
 from scipy.stats import pearsonr
 import math as m
+import pandas as pd
+
 
 def read_cfg(path_cfg):
     config = configparser.ConfigParser()
     config.read(path_cfg)
 
-    assert 'PATH' in config, "Could not find PATH in the config file."
-    assert 'PARAMETERS' in config, "Could not find PARAMETERS in the config file."
+    assert "PATH" in config, "Could not find PATH in the config file."
+    assert "PARAMETERS" in config, "Could not find PARAMETERS in the config file."
 
     dict_path = {}
-    for key in config['PATH']:
-        dict_path.update({key: config['PATH'][key]})
+    for key in config["PATH"]:
+        dict_path.update({key: config["PATH"][key]})
 
     dict_numerics = {}
-    for key in config['PARAMETERS']:
+    for key in config["PARAMETERS"]:
         try:
-            dict_numerics.update({key: int(config['PARAMETERS'][key])})
+            dict_numerics.update({key: int(config["PARAMETERS"][key])})
         except:
-            dict_numerics.update(config.get("PARAMETERS","peak_index_update_center"))
+            dict_numerics.update(config.get("PARAMETERS", "peak_index_update_center"))
 
     return dict_path, dict_numerics
 
@@ -49,7 +51,6 @@ def mask_image(mask_size, list_of_centers, list_of_radii, mask_inverse=False):
 def refine_peakpos_arb_dim(peakpos_all, image, numrefine, window_size):
     new_peakpos_all = np.empty_like(peakpos_all)
     for idx, peak in enumerate(peakpos_all):
-
         lbx = int(peak[1]) - window_size
         ubx = int(peak[1]) + window_size
         lby = int(peak[0]) - window_size
@@ -135,7 +136,7 @@ def azimuthal_average(image, center, mask=None, angular_bounds=None, trim=True):
     if angular_bounds:
         mi, ma = _angle_bounds(angular_bounds)
         angles = (
-                np.rad2deg(np.arctan2(Y - yc, X - xc)) + 180
+            np.rad2deg(np.arctan2(Y - yc, X - xc)) + 180
         )  # arctan2 is defined on [-pi, pi] but we want [0, pi]
         in_bounds = np.logical_and(mi <= angles, angles <= ma)
     else:
@@ -161,7 +162,7 @@ def azimuthal_average(image, center, mask=None, angular_bounds=None, trim=True):
 
 
 def _trim_bounds(arr):
-    """ Returns the bounds which would be used in numpy.trim_zeros """
+    """Returns the bounds which would be used in numpy.trim_zeros"""
     first = 0
     for i in arr:
         if i != 0.0:
@@ -201,252 +202,279 @@ def sum_peak_pixels(image, peak, window_size):
     return np.nansum(im_p)
 
 
-def peakpos_evolution(file_list, mask_total, laser_bkg, FF, peakpos_all, numrefine, window_size):
+def peakpos_evolution(
+    file_list, mask_total, laser_bkg, FF, peakpos_all, numrefine, window_size
+):
     peakpos_evolution = []
-    no_files  = len(file_list)
+    no_files = len(file_list)
     no_peaks = np.shape(peakpos_all)[0]
     for idx, f in tqdm.tqdm(enumerate(file_list)):
-        image = np.array(skued.diffread(f), dtype = np.int64)
-        #checks for saturation
-        #if nanmax(nanmax(Image))==65000
+        image = np.array(skued.diffread(f), dtype=np.int64)
+        # checks for saturation
+        # if nanmax(nanmax(Image))==65000
         #    msgbox(['Warning: Image ',num2str(k),' is saturated!'])
         #    end
-        #Apply mask
-        image = image*mask_total
-        #Substract background and flatfield
+        # Apply mask
+        image = image * mask_total
+        # Substract background and flatfield
         image = remove_bgk(image, laser_bkg, FF)
-        new_peakpos_all = refine_peakpos_arb_dim(peakpos_all, image, numrefine, window_size)
+        new_peakpos_all = refine_peakpos_arb_dim(
+            peakpos_all, image, numrefine, window_size
+        )
         peakpos_evolution.append(new_peakpos_all)
         peakpos_all = new_peakpos_all
 
-    peakpos_evolution = np.array(peakpos_evolution).reshape(no_files, 2*no_peaks)
+    peakpos_evolution = np.array(peakpos_evolution).reshape(no_files, 2 * no_peaks)
     return peakpos_evolution
 
-def normalize_pearson(signal_intensity, total_counts, tolerance = 1e-15, max_steps = 10000):
-    corr_int=1
-    offset=0
-    counter=0
-    while corr_int>0:
-        offset=10**counter;
-        signal_intensity_normalized = signal_intensity/(total_counts - offset)
-        #normalize with this offset value
-        #calculate correlation with total counts
+
+def normalize_pearson(signal_intensity, total_counts, tolerance=1e-15, max_steps=10000):
+    corr_int = 1
+    offset = 0
+    counter = 0
+    while corr_int > 0:
+        offset = 10**counter
+        signal_intensity_normalized = signal_intensity / (total_counts - offset)
+        # normalize with this offset value
+        # calculate correlation with total counts
         corr_int, pp = pearsonr(signal_intensity_normalized, total_counts)
-        counter=counter+1
-    offset_min=10**(counter-2)
-    offset_max=10**(counter-1)
+        counter = counter + 1
+    offset_min = 10 ** (counter - 2)
+    offset_max = 10 ** (counter - 1)
     print(corr_int)
     print(offset)
-    counter=1
+    counter = 1
 
-    while abs(corr_int)>tolerance and counter<max_steps:
-        #take new offset value in the middle
-        offset=(offset_max-offset_min)/2+offset_min
-        #normalize with this offset value
-        signal_intensity_normalized = signal_intensity/(total_counts - offset)
-        #calculate correlation with total counts
+    while abs(corr_int) > tolerance and counter < max_steps:
+        # take new offset value in the middle
+        offset = (offset_max - offset_min) / 2 + offset_min
+        # normalize with this offset value
+        signal_intensity_normalized = signal_intensity / (total_counts - offset)
+        # calculate correlation with total counts
         corr_int, pp = pearsonr(signal_intensity_normalized, total_counts)
-        #adjust the offset interval according to the sign of corr_int (the
-        #right offset lies at corr=0, so between positive and negative
-        #correlation)
-        if corr_int<0:
-            offset_max=offset;
+        # adjust the offset interval according to the sign of corr_int (the
+        # right offset lies at corr=0, so between positive and negative
+        # correlation)
+        if corr_int < 0:
+            offset_max = offset
         else:
-            offset_min=offset;
-        counter=counter+1;
+            offset_min = offset
+        counter = counter + 1
 
     return offset, corr_int
 
 
 def reshape(signal_raw, no_delays, scans, no_scans, exclude):
     signal_chunked = []
-    for scan in (no_scans):
+    for scan in no_scans:
         if scans.count(scan) == no_delays:
             if scan not in exclude:
                 if scan % 2 == 0:
-                    signal_chunked.append(signal_raw[scan * no_delays:scan * no_delays + no_delays, :])
+                    signal_chunked.append(
+                        signal_raw[scan * no_delays : scan * no_delays + no_delays, :]
+                    )
                 elif scan % 2 == 1:
                     # Stage goes back and forth in our experiment
-                    invert = signal_raw[scan * no_delays:scan * no_delays + no_delays, :][::-1]
+                    invert = signal_raw[
+                        scan * no_delays : scan * no_delays + no_delays, :
+                    ][::-1]
                     signal_chunked.append(invert)
         else:
-            print('excluding scans ' + str(scan))
+            print("excluding scans " + str(scan))
 
     signal_chunked = np.array(signal_chunked)
     return signal_chunked
 
-def normalize_pret0(signal_chunked, delays, t0_cutoff = -1000):
+
+def normalize_pret0(signal_chunked, delays, t0_cutoff=-1000):
     idx_neg = np.where(delays < t0_cutoff)[0]
     signal_chunked_nor = []
     for chunk in signal_chunked:
-        chunk = chunk/np.mean(chunk[idx_neg], axis = 0)
+        chunk = chunk / np.mean(chunk[idx_neg], axis=0)
         signal_chunked_nor.append(chunk)
     return signal_chunked_nor
 
-def qi_func(xdata_tuple, a, b, c ,d,e):
-    #squared function with tilded background
+
+def qi_func(xdata_tuple, a, b, c, d, e):
+    # squared function with tilded background
     (x, y) = xdata_tuple
-    x=x*np.cos(e)-y*np.sin(e)
-    y=x*np.sin(e)+y*np.cos(e)
-    #qi_xy =  a*(x**2+y**2)+b*x+c*y+d*x*y
-    qi_xy=np.sign(x)*a*x**2 + b*x + c*(x**2+y**2) + d*y*x
+    x = x * np.cos(e) - y * np.sin(e)
+    y = x * np.sin(e) + y * np.cos(e)
+    # qi_xy =  a*(x**2+y**2)+b*x+c*y+d*x*y
+    qi_xy = np.sign(x) * a * x**2 + b * x + c * (x**2 + y**2) + d * y * x
     return qi_xy
 
-def get_qVectors(kVec,hkl):
-#Get list of theoretical q-vectors by loading reciprocal lattice vectors from
-#cif file and multiplying them with miller indices in n x 3-matrix. n... number
-#of peaks. Returning qvec and norm. 
-    q=[];qvec= np.empty(shape=[3, 0])
-    for j in range(0,len(hkl)):
-        #Get miller indices from array
-        h=hkl[j][0]
-        k=hkl[j][1]
-        l=hkl[j][2]
-    
-        qtemp=(h*kVec[0]+k*kVec[1]+l*kVec[2]).reshape(3,1) #temp q vector
-        q.append(np.linalg.norm(qtemp)) #norm
-        qvec=np.append(qvec,qtemp,axis=1)
-    q=np.array(q,dtype=float)
-    return q, qvec
 
-def get_rotsym_BZs(qvec,rot_sym,tol):
-#Get rotational symmetric BZs. Those are BZs/Bragg peaks which have the same center
-#distance and scattering vector axis angle. 
-    q_rou = np.round(np.linalg.norm(qvec,axis=1),tol) #radius of q vectors with complete BZ
-    if qvec.shape[1]==3:
+def get_scattering_vectors(reciprocal_vectos: tuple, hkl: pd.DataFrame) -> pd.DataFrame:
+    """
+    Get list of theoretical q-vectors by loading reciprocal lattice vectors from
+    cif file and multiplying them with miller indices in n x 3-matrix. n... number
+    of peaks. Returning qvec and norm.
+    """
+    scattering_vectors = pd.DataFrame()
+    scattering_vectors["scattering_vectors"] = hkl.apply(
+        lambda row: row.iloc[0] * reciprocal_vectos[0]
+        + row.iloc[1] * reciprocal_vectos[1]
+        + row.iloc[2] * reciprocal_vectos[2],
+        axis=1,
+    )
+    scattering_vectors["length"] = scattering_vectors["scattering_vectors"].apply(
+        lambda row: np.linalg.norm(row)
+    )
+    return scattering_vectors
+
+
+def get_rotsym_BZs(qvec, rot_sym, tol):
+    # Get rotational symmetric BZs. Those are BZs/Bragg peaks which have the same center
+    # distance and scattering vector axis angle.
+    q_rou = np.round(
+        np.linalg.norm(qvec, axis=1), tol
+    )  # radius of q vectors with complete BZ
+    if qvec.shape[1] == 3:
         qvec = qvec.transpose()
 
-    ref_vec = qvec[0:2,0]
-    ang=[]
+    ref_vec = qvec[0:2, 0]
+    ang = []
     sym_BZs = []
-    
-    #Calculate angle to reference vector
-    for k in range(0,qvec.shape[1]):
-        ang.append(clockwise_angle(ref_vec,qvec[0:2,k])+m.pi)
-    
-    ang = np.round(ang,tol-1)
-    rot_ang = 2*m.pi/rot_sym #one symmetry rotation
-    ang_mod = np.round(np.mod(ang,rot_ang),tol-2) #modulo
-    
-    #BZs are rotational symmetric if modulo and radius are the same.
-    q_ang = np.vstack((q_rou,ang_mod)) #creating modulo-radius vector
-    q_ang_uni = np.unique(q_ang,axis=1)
-    for j in range(0,q_ang_uni.shape[1]):
-        temp_ind=[]
-        for k in range(0,q_ang.shape[1]):
-            if q_ang[0,k]==q_ang_uni[0,j] and q_ang[1,k]==q_ang_uni[1,j]:
-               temp_ind.append(k)
+
+    # Calculate angle to reference vector
+    for k in range(0, qvec.shape[1]):
+        ang.append(clockwise_angle(ref_vec, qvec[0:2, k]) + m.pi)
+
+    ang = np.round(ang, tol - 1)
+    rot_ang = 2 * m.pi / rot_sym  # one symmetry rotation
+    ang_mod = np.round(np.mod(ang, rot_ang), tol - 2)  # modulo
+
+    # BZs are rotational symmetric if modulo and radius are the same.
+    q_ang = np.vstack((q_rou, ang_mod))  # creating modulo-radius vector
+    q_ang_uni = np.unique(q_ang, axis=1)
+    for j in range(0, q_ang_uni.shape[1]):
+        temp_ind = []
+        for k in range(0, q_ang.shape[1]):
+            if q_ang[0, k] == q_ang_uni[0, j] and q_ang[1, k] == q_ang_uni[1, j]:
+                temp_ind.append(k)
         sym_BZs.append(temp_ind)
     return sym_BZs
 
-def rot_avg(qvec,rot_sym,sym_BZs):
-    #Transpose vector array to shape (3 x n)
-    if qvec.shape[1]==3:
-        qvec = qvec.transpose()
-    qvec = np.round(qvec,5)
-    
-    #Get indices of rot symmetric BZs
-    rot_ang = 360/rot_sym
-    orderlist = []
-    for i in range(0,len(sym_BZs)):
-        temp_qvecs = qvec[:,sym_BZs[i]]
 
-        #Check self consistency if all vectors have same length
-        sc = np.round(np.linalg.norm(temp_qvecs,axis=0),4)
-        if not sc[0]==np.sum(sc)/len(sc):
-            print('Error: Selected vectors dont have the same length!')
+def rot_avg(qvec, rot_sym, sym_BZs):
+    # Transpose vector array to shape (3 x n)
+    if qvec.shape[1] == 3:
+        qvec = qvec.transpose()
+    qvec = np.round(qvec, 5)
+
+    # Get indices of rot symmetric BZs
+    rot_ang = 360 / rot_sym
+    orderlist = []
+    for i in range(0, len(sym_BZs)):
+        temp_qvecs = qvec[:, sym_BZs[i]]
+
+        # Check self consistency if all vectors have same length
+        sc = np.round(np.linalg.norm(temp_qvecs, axis=0), 4)
+        if not sc[0] == np.sum(sc) / len(sc):
+            print("Error: Selected vectors dont have the same length!")
         else:
-        #Continue with analysis
+            # Continue with analysis
             order = [0]
-            for j in range(1,rot_sym):
-                rot_vec = vec_rot_3D_z(j*rot_ang,temp_qvecs[:,0])
+            for j in range(1, rot_sym):
+                rot_vec = vec_rot_3D_z(j * rot_ang, temp_qvecs[:, 0])
 
                 temp_diff = np.empty(temp_qvecs.shape)
-                for m in range(0,temp_qvecs.shape[1]):
-                    temp_diff[:,m] = temp_qvecs[:,m]-rot_vec
-                temp_diff = np.round(np.linalg.norm(temp_diff,axis=0),1)
-                match = np.where(temp_diff==0)[0]
-                
+                for m in range(0, temp_qvecs.shape[1]):
+                    temp_diff[:, m] = temp_qvecs[:, m] - rot_vec
+                temp_diff = np.round(np.linalg.norm(temp_diff, axis=0), 1)
+                match = np.where(temp_diff == 0)[0]
+
                 if match:
                     order.append(match[0])
                 else:
-                    order.append('NaN')
+                    order.append("NaN")
         orderlist.append(order)
     return orderlist
-        
-            
-def vec_rot_3D_z(ang_d,vec):
-    ang = np.radians(ang_d) #Conversion to radians
-    r = np.array([[np.cos(ang), -np.sin(ang),0],[np.sin(ang),  np.cos(ang),0],\
-                  [0,0,1]],dtype=float)
-    rot_vec= np.matmul(r,vec)
+
+
+def vec_rot_3D_z(ang_d, vec):
+    ang = np.radians(ang_d)  # Conversion to radians
+    r = np.array(
+        [[np.cos(ang), -np.sin(ang), 0], [np.sin(ang), np.cos(ang), 0], [0, 0, 1]],
+        dtype=float,
+    )
+    rot_vec = np.matmul(r, vec)
     return rot_vec
 
-def clockwise_angle(a,b):
-    #Gives clockwise angle in 0-360 deg of two 2D vectors.
-    dot = np.dot(a,b)      # dot product between [x1, y1] and [x2, y2]
-    det = a[0]*b[1] - b[0]*a[1]      # determinant
+
+def clockwise_angle(a, b):
+    # Gives clockwise angle in 0-360 deg of two 2D vectors.
+    dot = np.dot(a, b)  # dot product between [x1, y1] and [x2, y2]
+    det = a[0] * b[1] - b[0] * a[1]  # determinant
     angle = m.atan2(det, dot)
     return angle
 
-def reduce_BZ_to_rotsym_part(bravTyp,kpoints,kVec):
-    #Bravais typ = [1,2, ... 5]
-    #Kpoints handed out by Monkhorst-Pack ASE module
-    
-    #Monoclinic
+
+def reduce_BZ_to_rotsym_part(bravTyp, kpoints, kVec):
+    # Bravais typ = [1,2, ... 5]
+    # Kpoints handed out by Monkhorst-Pack ASE module
+
+    # Monoclinic
     if bravTyp == 1:
-        raise ValueError('Not implemented!')
-        
+        raise ValueError("Not implemented!")
+
     # Orthorombic
     if bravTyp == 2:
         kpoints = kpoints
-        
-    #Rhombus
+
+    # Rhombus
     if bravTyp == 3:
-        raise ValueError('Not implemented!')
-    
+        raise ValueError("Not implemented!")
+
     # Hexagonal Bravais lattice
     if bravTyp == 4:
-        minkp = np.min(kpoints,axis=0)
-        kpoints = kpoints-np.matlib.repmat(minkp, kpoints.shape[0], 1)
-        
-        if not np.sum(kpoints[:,2])<1e-15:
-            raise ValueError('Z-component of inplane vectors is not zero. Check lattice vector order.')
-        
-        if not kVec[0,1]<1e-15 and kVec[0,2]<1e-15:
-            raise ValueError('First vector must be paralle to x-axis.')
-        
-        #Cut kpoints matching to 1 BZ conditions
-        theta = -np.degrees(clockwise_angle(kVec[0,:],np.array([1,0,0])))
+        minkp = np.min(kpoints, axis=0)
+        kpoints = kpoints - np.matlib.repmat(minkp, kpoints.shape[0], 1)
+
+        if not np.sum(kpoints[:, 2]) < 1e-15:
+            raise ValueError(
+                "Z-component of inplane vectors is not zero. Check lattice vector order."
+            )
+
+        if not kVec[0, 1] < 1e-15 and kVec[0, 2] < 1e-15:
+            raise ValueError("First vector must be paralle to x-axis.")
+
+        # Cut kpoints matching to 1 BZ conditions
+        theta = -np.degrees(clockwise_angle(kVec[0, :], np.array([1, 0, 0])))
         temp_kpoints = np.empty(kpoints.shape)
-        for j in range(0,temp_kpoints.shape[0]):
-            temp_kpoints[j,:] = vec_rot_3D_z(theta,kpoints[j,:])
-        temp_b1 = vec_rot_3D_z(theta,kVec[0,:])
-        kpoints = kpoints[np.where(np.round(temp_kpoints[:,0],3)<=temp_b1[0]*0.5)[0],:]
-        
-        theta = -np.degrees(clockwise_angle(np.array([0,1,0]),kVec[1,:]))
+        for j in range(0, temp_kpoints.shape[0]):
+            temp_kpoints[j, :] = vec_rot_3D_z(theta, kpoints[j, :])
+        temp_b1 = vec_rot_3D_z(theta, kVec[0, :])
+        kpoints = kpoints[
+            np.where(np.round(temp_kpoints[:, 0], 3) <= temp_b1[0] * 0.5)[0], :
+        ]
+
+        theta = -np.degrees(clockwise_angle(np.array([0, 1, 0]), kVec[1, :]))
         temp_kpoints = np.empty(kpoints.shape)
-        for j in range(0,temp_kpoints.shape[0]):
-            temp_kpoints[j,:] = vec_rot_3D_z(theta,kpoints[j,:])
-        temp_b2 = vec_rot_3D_z(theta,kVec[1,:])
-        kpoints = kpoints[np.where(temp_kpoints[:,1]<=temp_b2[1]*0.5)[0],:]
-        
-        kpoints = kpoints[np.where(kpoints[:,0]>1e-15)[0],:]
-        
+        for j in range(0, temp_kpoints.shape[0]):
+            temp_kpoints[j, :] = vec_rot_3D_z(theta, kpoints[j, :])
+        temp_b2 = vec_rot_3D_z(theta, kVec[1, :])
+        kpoints = kpoints[np.where(temp_kpoints[:, 1] <= temp_b2[1] * 0.5)[0], :]
+
+        kpoints = kpoints[np.where(kpoints[:, 0] > 1e-15)[0], :]
+
         full_kpoints = kpoints
         rot_sym = 60
-        for k in range(1,6):
-            rot_angle = k*rot_sym
+        for k in range(1, 6):
+            rot_angle = k * rot_sym
             temp = np.zeros(kpoints.shape)
-            for j in range(0,kpoints.shape[0]):
-                temp[j,:] = vec_rot_3D_z(rot_angle,kpoints[j,:])
-            full_kpoints = np.vstack((full_kpoints,temp))
-        kpoints = np.vstack((np.zeros((1,3)),full_kpoints))
-            
-        print('Due to transformation of the Monkhorst-Pack grid to a rotational symmetric grid, the number of peaks changes.')
-    
-    #tetragonal
-    if bravTyp ==5:
+            for j in range(0, kpoints.shape[0]):
+                temp[j, :] = vec_rot_3D_z(rot_angle, kpoints[j, :])
+            full_kpoints = np.vstack((full_kpoints, temp))
+        kpoints = np.vstack((np.zeros((1, 3)), full_kpoints))
+
+        print(
+            "Due to transformation of the Monkhorst-Pack grid to a rotational symmetric grid, the number of peaks changes."
+        )
+
+    # tetragonal
+    if bravTyp == 5:
         kpoints = kpoints
-    
+
     return kpoints

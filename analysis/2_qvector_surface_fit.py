@@ -7,7 +7,6 @@ ROOT_DIR = os.getenv("ROOT_DIR")
 DATA_DIR = os.getenv("DATA_DIR")
 sys.path.append(ROOT_DIR)
 
-# %%
 from PIL import Image
 import sys
 from sklearn.metrics import r2_score
@@ -24,6 +23,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from crystals import Crystal
 import helpers.fedutils as utils
 from helpers.tools import center_of_mass, correct_image
+from helpers.fedutils import get_scattering_vectors
 
 # %%
 config_file = "config_2020_19_07.cfg"
@@ -43,9 +43,11 @@ peak_positions[["h","k","l"]]=peak_positions.miller_index.str.split(' ', expand=
 #%%
 
 def get_center(dataCom, dataps, q_rou):
-    # Determine center by getting mean of miller pair positions nearest to zero
-    # order peak. Those peaks are less effected by non-rotational symmetric
-    # squeezing and therefore most suited for center calculations.
+    """ 
+    Determine center by getting mean of miller pair positions nearest to zero
+    order peak. Those peaks are less effected by non-rotational symmetric
+    squeezing and therefore most suited for center calculations.
+    """
     mil_sel = []
     xcom = []
     ycom = []
@@ -242,13 +244,11 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
 #%%
 
 crystal = Crystal.from_cif(os.path.join(DATA_DIR, cif_file))
-kVec = np.array(crystal.reciprocal_vectors, float)
+kVec = crystal.reciprocal_vectors
+scattering_vectors = get_scattering_vectors(crystal.reciprocal_vectors, peak_positions[["h","k","l"]])
+# q_rou = np.around(q, decimals=7)
 
 #%%
-q, qvec = utils.get_qVectors(kVec, peak_positions[["h","k","l"]])
-q_rou = np.around(q, decimals=7)
-
-
 # Estimate error of reciprocal space projection on screen
 me = 9.109383e-31
 ec = 1.602176634e-19
