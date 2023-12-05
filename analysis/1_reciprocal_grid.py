@@ -21,8 +21,10 @@ from helpers.tools import center_of_mass, correct_image
 
 # %%
 image_file = os.path.join(DATA_DIR, "meas2/meas2_0015.tif")
-background_file = os.path.join(DATA_DIR,"laser_background/meas1_0039.tif")
-flatfield_file = os.path.join(DATA_DIR,"20180808_flatfield_improved_without_bad_pixel_mask.mat")
+background_file = os.path.join(DATA_DIR, "laser_background/meas1_0039.tif")
+flatfield_file = os.path.join(
+    DATA_DIR, "20180808_flatfield_improved_without_bad_pixel_mask.mat"
+)
 peak_positions_filepath = os.path.join(DATA_DIR, "peak_selection_large.txt")
 peak_positions = pd.read_csv(peak_positions_filepath, sep="\t")
 
@@ -57,6 +59,4 @@ for index, peak in peak_positions.iterrows():
     peak_positions.loc[index, "x_result"] = xpos
     peak_positions.loc[index, "y_result"] = ypos
 
-peak_positions.to_csv(os.path.join(DATA_DIR, "peak_positions.csv"))
-
-
+peak_positions.to_csv(os.path.join(DATA_DIR, "peak_positions.csv"), index=False)
