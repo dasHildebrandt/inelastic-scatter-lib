@@ -305,25 +305,6 @@ def qi_func(xdata_tuple, a, b, c, d, e):
     return qi_xy
 
 
-def get_scattering_vectors(reciprocal_vectos: tuple, hkl: pd.DataFrame) -> pd.DataFrame:
-    """
-    Get list of theoretical q-vectors by loading reciprocal lattice vectors from
-    cif file and multiplying them with miller indices in n x 3-matrix. n... number
-    of peaks. Returning qvec and norm.
-    """
-    scattering_vectors = pd.DataFrame()
-    scattering_vectors["scattering_vectors"] = hkl.apply(
-        lambda row: row.iloc[0] * reciprocal_vectos[0]
-        + row.iloc[1] * reciprocal_vectos[1]
-        + row.iloc[2] * reciprocal_vectos[2],
-        axis=1,
-    )
-    scattering_vectors["length"] = scattering_vectors["scattering_vectors"].apply(
-        lambda row: np.linalg.norm(row)
-    )
-    return scattering_vectors
-
-
 def get_rotsym_BZs(qvec, rot_sym, tol):
     # Get rotational symmetric BZs. Those are BZs/Bragg peaks which have the same center
     # distance and scattering vector axis angle.

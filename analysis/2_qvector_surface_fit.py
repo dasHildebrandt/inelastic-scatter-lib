@@ -33,17 +33,33 @@ background_file = "laser_background/meas1_0039.tif"
 flatfield_file = "20180808_flatfield_improved_without_bad_pixel_mask.mat"
 cif_file = "MoS2_mp-1018809_conventional_standard.cif"
 
-#%%
+# %%
 dict_path, dict_numerics = utils.read_cfg(os.path.join(DATA_DIR, config_file))
 electron_energy = dict_numerics["electron_energy"]
 
 peak_positions = pd.read_csv(os.path.join(DATA_DIR, peak_positions_file))
-peak_positions[["h","k","l"]]=peak_positions.miller_index.str.split(' ', expand=True).astype(float)
+peak_positions[["h", "k", "l"]] = peak_positions.miller_index.str.split(
+    " ", expand=True
+).astype(float)
 
-#%%
+# %%
 
-def get_center(dataCom, dataps, q_rou):
-    """ 
+crystal = Crystal.from_cif(os.path.join(DATA_DIR, cif_file))
+peak_positions["scattering_vector"] = peak_positions[["h", "k", "l"]].apply(
+    lambda row: row.iloc[0] * crystal.reciprocal_vectors[0]
+    + row.iloc[1] * crystal.reciprocal_vectors[1]
+    + row.iloc[2] * crystal.reciprocal_vectors[2],
+    axis=1,
+)
+peak_positions["length"] = peak_positions["scattering_vector"].apply(
+    lambda row: np.linalg.norm(row)
+)
+
+# %%
+
+
+def get_center(peak_positions: pd.DataFrame, dataps, q_rou):
+    """
     Determine center by getting mean of miller pair positions nearest to zero
     order peak. Those peaks are less effected by non-rotational symmetric
     squeezing and therefore most suited for center calculations.
@@ -241,14 +257,8 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
 
     return popt, sdiv, rqi, mean_rqi, R2
 
-#%%
 
-crystal = Crystal.from_cif(os.path.join(DATA_DIR, cif_file))
-kVec = crystal.reciprocal_vectors
-scattering_vectors = get_scattering_vectors(crystal.reciprocal_vectors, peak_positions[["h","k","l"]])
-# q_rou = np.around(q, decimals=7)
-
-#%%
+# %%
 # Estimate error of reciprocal space projection on screen
 me = 9.109383e-31
 ec = 1.602176634e-19
@@ -274,14 +284,11 @@ real_q = k0 * np.tan(2 * theta) * 1e-10
 proj_err = real_q - proj_q
 print("Projection error of highest peak: " + str(proj_err) + " A^-1")
 
-
+# %%
 # ------------------------------------------------------------------------------
 # Get distances of peak pos. This part calculates a conversion factor of one
 # diffraction pattern to estimate how one pixel distance is in reciprocal space.
 # Path of COM positons of one diffraction pattern calculated by script 01
-com_data_path = (
-    "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/centerOfMass_data.txt"
-)
 
 dataCom = np.loadtxt(com_data_path, dtype=float, skiprows=1)
 cen = get_center(dataCom, dataps, q_rou)
@@ -432,4 +439,3 @@ plt.savefig(
     format="png",
 )
 plt.show()
-
