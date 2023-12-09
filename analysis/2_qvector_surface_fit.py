@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from crystals import Crystal
 import helpers.fedutils as utils
-from helpers.tools import center_of_mass, correct_image
+from helpers.tools import center_of_mass, correct_image, get_center
 
 # %%
 config_file = "config_2020_19_07.cfg"
@@ -52,26 +52,7 @@ peak_positions["scattering_vector_length"] = (
     peak_positions["scattering_vector"].apply(lambda row: np.linalg.norm(row)).round(7)
 )
 
-
-# %%
-lowest_order_peaks = peak_positions[
-    peak_positions["scattering_vector_length"]
-    == peak_positions["scattering_vector_length"].min()
-]
-miller_indices = lowest_order_peaks[["h", "k", "l"]]
-miller_indices_inverse = lowest_order_peaks[["h", "k", "l"]] * -1
-peak_pair_indices = [
-    (i, j)
-    for i, row1 in miller_indices.iterrows()
-    for j, row2 in miller_indices_inverse.iterrows()
-    if row1.equals(row2)
-]
-unique_peak_pairs = set(tuple(sorted(pair)) for pair in peak_pair_indices)
-unique_peak_pairs = list(unique_peak_pairs)
-
-indices =  [item for tup in unique_peak_pairs for item in tup]
-lowest_order_peaks = peak_positions.iloc[indices]
-center = (lowest_order_peaks["x_result"].mean(),lowest_order_peaks["y_result"].mean())
+center = get_center(peak_positions=peak_positions)
 
 
 def Nxy(xdata_tuple, a, b, c, d, e):
@@ -233,60 +214,68 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
 
 
 # %%
-# ------------------------------------------------------------------------------
 # Get distances of peak pos. This part calculates a conversion factor of one
 # diffraction pattern to estimate how one pixel distance is in reciprocal space.
 # Path of COM positons of one diffraction pattern calculated by script 01
 
-dataCom = np.loadtxt(com_data_path, dtype=float, skiprows=1)
-cen = get_center(dataCom, dataps, q_rou)
-rcom = []
-for j in range(0, len(dataps)):
-    rcom.append(
-        m.sqrt(
-            (cen[0] - float(dataCom[j][0])) ** 2 + (cen[1] - float(dataCom[j][1])) ** 2
-        )
-    )
+peak_positions["center_distance"] = peak_positions.apply(
+    lambda row: m.sqrt(
+        (center[0] - row["x_result"]) ** 2 + (center[1] - row["y_result"]) ** 2
+    ),
+    axis=1,
+)
 
+# %%
 # Get anf fit conversion factor N(x,y) [A^-1/px]
 
-N = get_fit_show_Nxy(rcom, q_rou, dataCom, cen)
+N = get_fit_show_Nxy(
+    peak_positions["center_distance"].to_numpy(),
+    peak_positions["scattering_vector_length"].to_numpy(),
+    peak_positions[["x_result","y_result"]].to_numpy(),
+    center,
+)
 # ------------------------------------------------------------------------------
-
+#%%
 # Get tif files from data set dir
-files = glob.glob(datapath + "*.tif")  # get file list
+files = glob.glob(os.path.join(DATA_DIR,datapath) + "*.tif")  
 number_tif = len(files)
 
+#%%
+
 # Write peak and center positions
-posFile = "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/pos_com_data.txt"
+posFile = os.path.join(DATA_DIR, "pos_com_data.txt")
 
 # Write fit parameters in text
-qxFile = "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/qx_fit_data.txt"
+qxFile = os.path.join(DATA_DIR,"qx_fit_data.txt")
 dataqx = open(qxFile, "w")
 dataqx.writelines("a" + "\t" + "b" + "\t" + "c" + "\t" + "d" + "\t" + "e" + "\n")
 
-qyFile = "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/qy_fit_data.txt"
+qyFile = os.path.join(DATA_DIR,"qy_fit_data.txt")
 dataqy = open(qyFile, "w")
 dataqy.writelines("a" + "\t" + "b" + "\t" + "c" + "\t" + "d" + "\t" + "e" + "\n")
 
-dataFile = "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/cen_res_data.txt"
+dataFile = os.path.join(DATA_DIR,"cen_res_data.txt")
 data = open(dataFile, "w")
 data.writelines(
     "center-x" + "\t" + "center-y" + "\t" + "qx-residual" + "\t" + "qy-residual" + "\n"
 )
+
+dataps = peak_positions[["x","y","miller_index","roi"]].to_numpy()
+qvec = peak_positions["scattering_vector"].to_numpy()
+q_rou = peak_positions["scattering_vector_length"].to_numpy()
 
 for k in range(0, number_tif):
     # Apply corrections to image
     print("File:", str(k), " of ", str(number_tif))
     img = Image.open(files[k])
     IM = np.asarray(img, dtype="float64")
-    if BGfile:
-        BG = Image.open(BGfile)
+    if background_file:
+        BG = Image.open(os.path.join(DATA_DIR,background_file))
         BGimg = np.asarray(BG, dtype="float64")
         IMcor = IM - BGimg
-    if FFfile:
-        FFmat = sio.loadmat(FFfile)
-        FFimg = FFmat["FF"]  # changes if FF file chnges
+    if flatfield_file:
+        FFmat = sio.loadmat(os.path.join(DATA_DIR,flatfield_file))
+        FFimg = FFmat["FF"] 
         IMcor = np.multiply(FFimg, IMcor)
 
     pos = np.empty((0, 2))
@@ -308,7 +297,7 @@ for k in range(0, number_tif):
         peak = IMcor[xlb:xub, ylb:yub]
 
         # Apply center of mass method
-        xpos, ypos = com(peak, x, y)
+        xpos, ypos = center_of_mass(peak, x, y)
 
         pos = np.vstack((pos, [xpos, ypos]))
 
@@ -383,7 +372,7 @@ plt.xlabel("Image number [#]", fontsize=12)
 plt.ylabel("Center shift [px]", fontsize=12)
 plt.dist = 12
 plt.savefig(
-    "//nap33.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/center_shift.png",
+    os.path.join(DATA_DIR,"center_shift.png"),
     format="png",
 )
 plt.show()

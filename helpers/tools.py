@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import scipy.io as sio
 from PIL import Image
 
@@ -66,3 +67,43 @@ def arrayIndex(M, ind):
     for j in range(0, len(ind)):
         new_array = np.append(new_array, M[ind[j]])
     return new_array
+
+
+def get_center(peak_positions: pd.DataFrame) -> tuple:
+    """Returns the center beam of the diffraction pattern (transmitted beam), calculated
+    from the mean positions of the lowest order Bragg peak pairs.
+
+    Args:
+        peak_positions (pd.DataFrame): Dataframe containing the Bragg peak properties
+
+    Returns:
+        tuple: position of the center peak
+    """
+    lowest_order_peaks = peak_positions[
+        peak_positions["scattering_vector_length"]
+        == peak_positions["scattering_vector_length"].min()
+    ]
+    miller_indices = lowest_order_peaks[["h", "k", "l"]]
+    miller_indices_inverse = lowest_order_peaks[["h", "k", "l"]] * -1
+    peak_pair_indices = [
+        (i, j)
+        for i, row1 in miller_indices.iterrows()
+        for j, row2 in miller_indices_inverse.iterrows()
+        if row1.equals(row2)
+    ]
+    unique_peak_pairs = set(tuple(sorted(pair)) for pair in peak_pair_indices)
+    unique_peak_pairs = list(unique_peak_pairs)
+
+    if not unique_peak_pairs:
+        raise ValueError("No peak pairs found for center peak position calculation.")
+    else:
+        print(
+            f"Center calculated from the mean of {len(unique_peak_pairs)} peak pair position."
+        )
+
+    indices = [item for tup in unique_peak_pairs for item in tup]
+    lowest_order_peaks = peak_positions.iloc[indices]
+    return (
+        lowest_order_peaks["x_result"].mean(),
+        lowest_order_peaks["y_result"].mean(),
+    )

@@ -1,0 +1,1 @@
+center-x	center-y	qx-residual	qy-residual

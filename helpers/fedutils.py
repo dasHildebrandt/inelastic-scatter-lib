@@ -459,3 +459,5 @@ def reduce_BZ_to_rotsym_part(bravTyp, kpoints, kVec):
         kpoints = kpoints
 
     return kpoints
+
+
