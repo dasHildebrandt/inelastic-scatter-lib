@@ -23,7 +23,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from crystals import Crystal
 import helpers.fedutils as utils
 from helpers.tools import center_of_mass, correct_image
-from helpers.fedutils import get_scattering_vectors
 
 # %%
 config_file = "config_2020_19_07.cfg"
@@ -42,8 +41,6 @@ peak_positions[["h", "k", "l"]] = peak_positions.miller_index.str.split(
     " ", expand=True
 ).astype(float)
 
-# %%
-
 crystal = Crystal.from_cif(os.path.join(DATA_DIR, cif_file))
 peak_positions["scattering_vector"] = peak_positions[["h", "k", "l"]].apply(
     lambda row: row.iloc[0] * crystal.reciprocal_vectors[0]
@@ -51,53 +48,30 @@ peak_positions["scattering_vector"] = peak_positions[["h", "k", "l"]].apply(
     + row.iloc[2] * crystal.reciprocal_vectors[2],
     axis=1,
 )
-peak_positions["length"] = peak_positions["scattering_vector"].apply(
-    lambda row: np.linalg.norm(row)
+peak_positions["scattering_vector_length"] = (
+    peak_positions["scattering_vector"].apply(lambda row: np.linalg.norm(row)).round(7)
 )
 
+
 # %%
+lowest_order_peaks = peak_positions[
+    peak_positions["scattering_vector_length"]
+    == peak_positions["scattering_vector_length"].min()
+]
+miller_indices = lowest_order_peaks[["h", "k", "l"]]
+miller_indices_inverse = lowest_order_peaks[["h", "k", "l"]] * -1
+peak_pair_indices = [
+    (i, j)
+    for i, row1 in miller_indices.iterrows()
+    for j, row2 in miller_indices_inverse.iterrows()
+    if row1.equals(row2)
+]
+unique_peak_pairs = set(tuple(sorted(pair)) for pair in peak_pair_indices)
+unique_peak_pairs = list(unique_peak_pairs)
 
-
-def get_center(peak_positions: pd.DataFrame, dataps, q_rou):
-    """
-    Determine center by getting mean of miller pair positions nearest to zero
-    order peak. Those peaks are less effected by non-rotational symmetric
-    squeezing and therefore most suited for center calculations.
-    """
-    mil_sel = []
-    xcom = []
-    ycom = []
-
-    ind = np.where(q_rou == min(q_rou))  # lowest Bragg peaks
-    # select only first peaks
-    tempcom = []
-    tempps = []
-    for j in range(0, len(ind[0])):
-        tempcom.append(dataCom[ind[0][j]])
-        tempps.append(dataps[ind[0][j]])
-    dataComs = tempcom
-    datapss = tempps
-
-    for j in range(0, len(datapss)):
-        mil_sel.append(datapss[j][2].replace("-", ""))  # erase '-' fromindices
-    mil_sel = np.array(mil_sel)  # all miller indices
-    umil_sel = np.array(list(set(mil_sel)))  # unique millerindices
-
-    #
-    for j in range(0, len(umil_sel)):
-        ind = np.where(mil_sel == umil_sel[j])
-        if len(ind[0]) == 2 or len(ind[0]) == 4:
-            for jj in range(0, len(ind[0])):
-                # print(str(mil_sel[ind[0][jj]]))
-
-                xcom.append(float(dataComs[ind[0][jj]][0]))
-                ycom.append(float(dataComs[ind[0][jj]][1]))
-
-    # center for center of mass
-    xcom = np.array(xcom)  # convert to array format
-    ycom = np.array(ycom)
-    cen = np.array([np.mean(xcom, axis=0), np.mean(ycom, axis=0)])
-    return cen
+indices =  [item for tup in unique_peak_pairs for item in tup]
+lowest_order_peaks = peak_positions.iloc[indices]
+center = (lowest_order_peaks["x_result"].mean(),lowest_order_peaks["y_result"].mean())
 
 
 def Nxy(xdata_tuple, a, b, c, d, e):
@@ -257,32 +231,6 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
 
     return popt, sdiv, rqi, mean_rqi, R2
 
-
-# %%
-# Estimate error of reciprocal space projection on screen
-me = 9.109383e-31
-ec = 1.602176634e-19
-h = 6.62607015e-34
-ind_high_peak = np.where(q_rou == np.max(q_rou))[0][0]
-dbwl = h / np.sqrt(2 * me * ec * electron_energy * 1e3)
-k0 = 2 * m.pi / dbwl
-max_hkl = hkl[ind_high_peak, :]
-d_hkl = (
-    2
-    * m.pi
-    / np.linalg.norm(
-        max_hkl[0] * kVec[0, :] + max_hkl[1] * kVec[1, :] + max_hkl[2] * kVec[2, :]
-    )
-)
-theta = np.arcsin(dbwl / (2 * d_hkl * 1e-10))
-proj_q = q[ind_high_peak]
-G = 2 * k0 * 1e-10 * np.sin(theta)
-if np.round(G - proj_q, 15) < 0:
-    raise ValueError("q and kVec are not from the same crystal!")
-
-real_q = k0 * np.tan(2 * theta) * 1e-10
-proj_err = real_q - proj_q
-print("Projection error of highest peak: " + str(proj_err) + " A^-1")
 
 # %%
 # ------------------------------------------------------------------------------
