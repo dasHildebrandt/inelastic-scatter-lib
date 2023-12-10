@@ -62,7 +62,7 @@ def Nxy(xdata_tuple, a, b, c, d, e):
     return Nxy.ravel()
 
 
-def get_fit_show_Nxy(rcom, q_rou, dataCom, cen):
+def get_fit_show_Nxy(rcom, q_rou, dataCom, center):
     pos = np.array(dataCom, dtype=float)
     x = pos[:, 0]
     y = pos[:, 1]
@@ -71,10 +71,10 @@ def get_fit_show_Nxy(rcom, q_rou, dataCom, cen):
     N = np.divide(q_rou, r)
     ws = max(rcom)
 
-    xlb = cen[0] - ws
-    xub = cen[0] + ws
-    ylb = cen[1] - ws
-    yub = cen[1] + ws
+    xlb = center[0] - ws
+    xub = center[0] + ws
+    ylb = center[1] - ws
+    yub = center[1] + ws
 
     xs = np.arange(xlb, xub, 1)
     ys = np.arange(ylb, yub, 1)
@@ -98,18 +98,14 @@ def get_fit_show_Nxy(rcom, q_rou, dataCom, cen):
     print("Paras:", str(popt))
     print("Standard deviations :", str(sdiv), "\n")
 
-    # plot N(x,y)
     fig = plt.figure(num=None, figsize=(12, 8), dpi=100, facecolor="w", edgecolor="k")
     plt.rcParams["font.size"] = 12
     ax = fig.add_subplot(111, projection="3d")
-    colmap = cm.ScalarMappable(cmap=cm.hsv)
-    colmap.set_array(N)  # cm.hsv(arg) arg is between 0-1. Normalize z to [0,1].
     ax.scatter(
         x, y, N, c=cm.hsv((N - min(N)) / max(N - min(N))), marker="o", edgecolor="k"
     )
-    ax.scatter(cen[0], cen[1], popt[1], c="k")
+    ax.scatter(center[0], center[1], popt[1], c="k")
     sp = ax.plot_surface(xgrid, ygrid, N_fit, cmap=cm.hsv, alpha=0.3)
-    fig.colorbar(colmap)
     ax.set_xlabel("x [px]")
     ax.set_ylabel("y [px]")
     ax.set_zlabel("N(x,y) [$\AA^{-1}$/px]")  # ,linespacing=15
@@ -132,17 +128,17 @@ def res_func(xdata_tuple, A, f, g, h, a, b):
 
 
 def give_fit_paras(popt, pcov, data, fit, print_results):
-    sdiv = np.sqrt(np.diag(pcov))  # Standard diviation
-    res = data - fit  # residuals
+    sdiv = np.sqrt(np.diag(pcov)) 
+    res = data - fit
     mean_res = np.mean(abs(res))
 
     r2 = r2_score(data, fit)
 
     if print_results == 1:
-        print("Mean residuals: ", str(mean_res))
-        print("R^2= ", str(r2))
-        print("Paras:", str(popt))
-        print("Standard deviations :", str(sdiv), "\n")
+        print(f"Mean residuals: {mean_res}")
+        print(f"R^2= {r2}")
+        print(f"Paras: {popt}")
+        print(f"Standard deviations :{sdiv}")
 
     return sdiv, res, mean_res, r2
 
@@ -172,8 +168,7 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
         plt.rcParams["font.size"] = 12
         ax = fig.add_subplot(111, projection="3d")
         colmap = cm.ScalarMappable(cmap=cm.hsv)
-        colmap.set_array(qi)  # cm.hsv(arg) arg is between 0-1. Normalize z to [0,1].
-        # cm.hsv(arg) arg is between 0-1. Normalize z to [0,1].
+        colmap.set_array(qi) 
         ax.scatter(
             x,
             y,
@@ -187,7 +182,7 @@ def fit_qi(qi, x, y, xgrid, ygrid, show_plot):
         fig.colorbar(colmap)
         ax.set_xlabel("x [px]")
         ax.set_ylabel("y [px]")
-        ax.set_zlabel("$q_i(x,y)$ [$\AA^{-1}$]")  # ,linespacing=15
+        ax.set_zlabel("$q_i(x,y)$ [$\AA^{-1}$]") 
         ax.zaxis.set_label_coords(100, 100, 1)
         ax.dist = 10
         ax.tick_params(axis="z", labelrotation=45)
@@ -225,59 +220,52 @@ peak_positions["center_distance"] = peak_positions.apply(
     axis=1,
 )
 
-# %%
-# Get anf fit conversion factor N(x,y) [A^-1/px]
+# %% Get anf fit conversion factor N(x,y) [A^-1/px]
 
 N = get_fit_show_Nxy(
     peak_positions["center_distance"].to_numpy(),
     peak_positions["scattering_vector_length"].to_numpy(),
-    peak_positions[["x_result","y_result"]].to_numpy(),
+    peak_positions[["x_result", "y_result"]].to_numpy(),
     center,
 )
 # ------------------------------------------------------------------------------
-#%%
-# Get tif files from data set dir
-files = glob.glob(os.path.join(DATA_DIR,datapath) + "*.tif")  
+# %% Get tif files from data set dir
+files = glob.glob(os.path.join(DATA_DIR, datapath) + "*.tif")
 number_tif = len(files)
 
-#%%
-
+# %%
 # Write peak and center positions
 posFile = os.path.join(DATA_DIR, "pos_com_data.txt")
 
 # Write fit parameters in text
-qxFile = os.path.join(DATA_DIR,"qx_fit_data.txt")
+qxFile = os.path.join(DATA_DIR, "qx_fit_data.txt")
 dataqx = open(qxFile, "w")
 dataqx.writelines("a" + "\t" + "b" + "\t" + "c" + "\t" + "d" + "\t" + "e" + "\n")
 
-qyFile = os.path.join(DATA_DIR,"qy_fit_data.txt")
+qyFile = os.path.join(DATA_DIR, "qy_fit_data.txt")
 dataqy = open(qyFile, "w")
 dataqy.writelines("a" + "\t" + "b" + "\t" + "c" + "\t" + "d" + "\t" + "e" + "\n")
 
-dataFile = os.path.join(DATA_DIR,"cen_res_data.txt")
+dataFile = os.path.join(DATA_DIR, "cen_res_data.txt")
 data = open(dataFile, "w")
 data.writelines(
     "center-x" + "\t" + "center-y" + "\t" + "qx-residual" + "\t" + "qy-residual" + "\n"
 )
 
-dataps = peak_positions[["x","y","miller_index","roi"]].to_numpy()
-qvec = peak_positions["scattering_vector"].to_numpy()
+dataps = peak_positions[["x", "y", "miller_index", "roi"]].to_numpy()
+qvec = np.vstack(peak_positions["scattering_vector"].to_numpy()).reshape(3,-1)
 q_rou = peak_positions["scattering_vector_length"].to_numpy()
 
 for k in range(0, number_tif):
     # Apply corrections to image
-    print("File:", str(k), " of ", str(number_tif))
-    img = Image.open(files[k])
-    IM = np.asarray(img, dtype="float64")
-    if background_file:
-        BG = Image.open(os.path.join(DATA_DIR,background_file))
-        BGimg = np.asarray(BG, dtype="float64")
-        IMcor = IM - BGimg
-    if flatfield_file:
-        FFmat = sio.loadmat(os.path.join(DATA_DIR,flatfield_file))
-        FFimg = FFmat["FF"] 
-        IMcor = np.multiply(FFimg, IMcor)
+    print(f"File: {k} of {number_tif}")
+    IMcor = correct_image(
+        image_file=files[k],
+        background_file=os.path.join(DATA_DIR, background_file),
+        flatfield_file=os.path.join(DATA_DIR, flatfield_file),
+    )
 
+    positions = peak_positions.copy()
     pos = np.empty((0, 2))
     for jj in range(0, len(dataps)):
         x0 = float(dataps[jj][0])  # position x of peak idx.
@@ -301,12 +289,13 @@ for k in range(0, number_tif):
 
         pos = np.vstack((pos, [xpos, ypos]))
 
+    positions[["x_result","y_result"]] = pos
     # Get center (position of zero order peak)
-    cen = get_center(pos, dataps, q_rou)
+    center = get_center(positions)
 
     # Create grid
-    x = pos[:, 0] - cen[0]
-    y = pos[:, 1] - cen[1]
+    x = pos[:, 0] - center[0]
+    y = pos[:, 1] - center[1]
     xlb = np.round(min(x))
     xub = np.round(max(x))
     ylb = np.round(min(y))
@@ -321,9 +310,9 @@ for k in range(0, number_tif):
     py, sdy, rqy, mean_rqy, R2y = fit_qi(qvec[1, :], x, y, xgrid, ygrid, 0)
 
     data.writelines(
-        str(cen[0])
+        str(center[0])
         + "\t"
-        + str(cen[1])
+        + str(center[1])
         + "\t"
         + str(mean_rqx)
         + "\t"
@@ -372,7 +361,7 @@ plt.xlabel("Image number [#]", fontsize=12)
 plt.ylabel("Center shift [px]", fontsize=12)
 plt.dist = 12
 plt.savefig(
-    os.path.join(DATA_DIR,"center_shift.png"),
+    os.path.join(DATA_DIR, "center_shift.png"),
     format="png",
 )
 plt.show()
