@@ -1,8 +1,5 @@
-# -*- coding: utf-8 -*-
 """
 
-
-@author: Patrick Hildebrandt, 20.07.2020
 """
 
 #import sys, configparser
