@@ -31,10 +31,28 @@ def read_cfg(path_cfg):
     return dict_path, dict_numerics
 
 
-def mask_image(mask_size, list_of_centers, list_of_radii, mask_inverse=False):
-    mask = np.ones(mask_size, dtype=np.float)
-    assert len(list_of_centers) == len(list_of_radii)
-    for idx, center in enumerate(list_of_centers):
+def get_mask_image(
+    mask_size: tuple,
+    center_positions: list[tuple],
+    list_of_radii: list[float],
+    mask_inverse: bool = False,
+) -> np.ndarray:
+    """
+    Returns a mask in image size as a numpy array containing zeros and ones values. The mask should be
+    multiplied with the diffraction pattern.
+
+    Args:
+        mask_size (tuple): Size of the diffraction image to be masked.
+        center_positions (list[float]): Positions of the transmitted diffraction beams.
+        list_of_radii (list[float]): Radius of
+        mask_inverse (bool, optional): Inverse . Defaults to False.
+
+    Returns:
+        mask (ndarray): Mask image cotaining zeros and ones for multiplication with diffraction pattern.
+    """
+    mask = np.ones(mask_size, dtype=float)
+    assert len(center_positions) == len(list_of_radii)
+    for idx, center in enumerate(center_positions):
         xc = center[1]
         yc = center[0]
         radius = list_of_radii[idx]
@@ -459,5 +477,3 @@ def reduce_BZ_to_rotsym_part(bravTyp, kpoints, kVec):
         kpoints = kpoints
 
     return kpoints
-
-
