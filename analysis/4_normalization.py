@@ -19,13 +19,14 @@ sys.path.append(ROOT_DIR)
 config_file = "config_2020_19_07.cfg"
 
 import tqdm
-
+import ast
 import glob
 import numpy as np
 import pandas as pd
 import skued
 import scipy.io as spio
 import pylab as plt
+from PIL import Image
 
 from helpers.fedutils import (
     get_mask_image,
@@ -82,7 +83,9 @@ mask_size_zero_order = dict_numerics["mask_size_zero_order"]
 max_distance = dict_numerics["max_distance"]
 
 # Creating dummy image for displaying masks
-dummy = correct_image(
+dummy_image = Image.open(diffraction_images[1])
+dummy = np.asarray(dummy_image, dtype="float64")
+dummy_bkg = correct_image(
     image_file=diffraction_images[1],
     background_file=background_file,
     flatfield_file=flatfield_file,
@@ -103,7 +106,7 @@ masked_bragg = (
     get_mask_image(
         mask_size=dummy.shape,
         center_positions=list(
-            zip(peak_positions["y_result"], peak_positions["x_result"])
+            zip(peak_positions["x_result"], peak_positions["y_result"])
         ),
         list_of_radii=window_size_intensity * np.ones(number_of_peaks),
     )
@@ -114,7 +117,7 @@ masked_total_counts = (
 )
 masked_dyn_bg = get_mask_image(
     mask_size=dummy.shape,
-    center_positions=list(zip(peak_positions["y_result"], peak_positions["x_result"])),
+    center_positions=list(zip(peak_positions["x_result"], peak_positions["y_result"])),
     list_of_radii=window_size_background_peaks * np.ones(number_of_peaks),
 )
 
@@ -123,6 +126,7 @@ peak_position_evolution_file = os.path.join(DATA_DIR, dict_path["peak_pos"])
 
 if os.path.exists(peak_position_evolution_file):
     peak_position_evolution = pd.read_csv(peak_position_evolution_file)
+    peak_position_evolution = peak_position_evolution.applymap(ast.literal_eval)
 else:
     print("Creating peak position file...")
     peak_position_evolution = get_peak_position_evolution(
@@ -137,9 +141,7 @@ else:
         os.path.join(DATA_DIR, "peak_position_evolution.csv"), index=False
     )
 
-# %%
-
-# Path for saving output file
+# %% Path for saving output file
 PATH_OUTPUT = (
     diffraction_data_path
     + dict_path["path_output"]
@@ -148,8 +150,7 @@ PATH_OUTPUT = (
     + ".txt"
 )
 
-# %% Display Masks
-# Display images with masks
+# %% Display images with masks
 cmap = "inferno"
 b = 2
 fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(
@@ -162,9 +163,9 @@ ax3.pcolormesh(dummy_bkg * b, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap
 ax4.pcolormesh(
     dummy_bkg * masked_bragg, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap
 )
-for idp, pp in enumerate(peak_positions):
-    ax4.plot(pp[1], pp[0], marker="x", markersize=4, color="r")
-    ax4.text(pp[1] - 10, pp[0] - 10, str(idp), color="r")
+for idp, pp in peak_positions.iterrows():
+    ax4.plot(pp.y, pp.x, marker="x", markersize=4, color="r")
+    ax4.text(pp.y - 10, pp.x - 10, str(idp), color="r")
 ax5.pcolormesh(
     dummy_bkg * masked_total_counts,
     vmin=-0,
@@ -183,88 +184,65 @@ ax1.set_title("Original")
 ax2.set_title("Laser background removed")
 ax3.set_title("Background without_laser")
 ax4.set_title("Bragg peaks windows")
-ax5.set_title("Mask for total e counts")
+ax5.set_title("Mask for total electron counts")
 ax6.set_title("Mask for dynamical background")
 lim = 800
 plt.tight_layout()
 plt.show()
 plt.savefig(
-    "//nap1.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/Timetraces/masks.png",
+    os.path.join(DATA_DIR, "masks.png"),
     format="png",
 )
 
-# =============================================================================
-# START ANALYSIS
+# %% START ANALYSIS
 # Old data is loaded when not deleted.
-# =============================================================================
 
-# Get tif files from data set dir
-fn = glob.glob(diffraction_data_path + "*.tif")  # get file list
-num_img = len(fn)
-for k in range(0, len(fn)):
-    fn[k] = os.path.basename(fn[k])
-
-if os.path.isfile(DATA_DIR + "output_data_04.npz") == True:
+if os.path.exists(DATA_DIR + "output_data_04.npz"):
     npzfile = np.load(DATA_DIR + "output_data_04.npz")
     total_counts = npzfile["tc"]
-    peakpos_evolution = npzfile["pp_evo"]
+    peak_position_evolution = npzfile["pp_evo"]
     intensities_raw = npzfile["int_raw"]
     npzfile.close()
-
 else:
     # Loop over all images collecting peak intensities, total counts etc....
     if partial == 0:
-        partial = len(fn)
-    peakpos_evolution = []
-    total_counts = np.zeros(len(fn[0:partial]))
-    background_raw = np.zeros(len(fn[0:partial]))
-    # distance_matrix = centeredDistanceMatrix(np.shape(dummy)[0])
-    intensities_raw = np.zeros((number_of_peaks, len(fn[0:partial])))
+        partial = len(diffraction_images)
+    total_counts = np.zeros(len(diffraction_images[0:partial]))
+    background_raw = np.zeros(len(diffraction_images[0:partial]))
+    intensities_raw = np.zeros((number_of_peaks, len(diffraction_images[0:partial])))
 
-    for idx, bn in tqdm.tqdm(enumerate(fn[0:partial])):
-        image = np.array(skued.diffread(diffraction_data_path + bn), dtype=np.int64)
-        # checks for saturation
+    for idx, diffraction_image in tqdm.tqdm(enumerate(diffraction_images[0:partial])):
+        image = correct_image(
+            image_file=diffraction_image,
+            background_file=background_file,
+            flatfield_file=flatfield_file,
+        )
         if np.nanmax(np.nanmax(image)) == 65000:
-            print("Warning: Image " + str(k) + " is saturated!")
+            print("Warning: Image " + str(idx) + " is saturated!")
 
-        # Apply mask
-        image = image * mask_total
-        # Substract background and flatfield
-        image = remove_bgk(image, LASER_BKG, FF)
-        new_peakpos_all = refine_peakpos_arb_dim(peak_positions, image, 0, 8)
-        peakpos_evolution.append(new_peakpos_all)
-        peak_positions = new_peakpos_all
-        # Calculates total electrons number
         total_counts[idx] = np.nansum(image * masked_total_counts)
 
-        image_bgs = image
-        for idp, peak in enumerate(peak_positions):
+        for idp, peak in enumerate(peak_position_evolution[f'{idx}']):
             intensities_raw[idp, idx] = sum_peak_pixels(
-                image_bgs, peak, window_size_intensity
+                image, peak, window_size_intensity
             )
 
-    # Saving data in an npz file
-    np.savez(
-        DATA_DIR + "output_data_04.npz",
-        pp_evo=peakpos_evolution,
-        int_raw=intensities_raw,
-        tc=total_counts,
-    )
+# Saving data in an npz file
+np.savez(
+    DATA_DIR + "output_data_04.npz",
+    pp_evo=peak_position_evolution,
+    int_raw=intensities_raw,
+    tc=total_counts,
+)
 
-# =============================================================================
-# DISPLAY DATA
-# =============================================================================
-# Display total counts and peakpos evolution
+#%% Display total counts and peakpos evolution
 plt.figure()
 plt.plot(np.arange(len(total_counts)), total_counts)
 plt.xlabel("Image number [#]")
 plt.ylabel("Total counts [#]")
 plt.show()
 
-# =============================================================================
-# NORMALIZATION
-# =============================================================================
-# Normalize dataset via minimizing correlation of NOE
+#%%  Normalize dataset via minimizing correlation of NOE
 offset, corr_int = normalize_pearson(
     np.mean(intensities_raw, axis=0), total_counts, tolerance=1e-15, max_steps=10000
 )
@@ -280,11 +258,11 @@ with open(diffraction_data_path + log_file, "rt") as meta:
     lines = meta.readlines()
 del lines[0]
 
-fn = []
+diffraction_images = []
 delays = []
 scans = []
 for line in lines:
-    fn.append(line.split("\t")[0] + ".tif")
+    diffraction_images.append(line.split("\t")[0] + ".tif")
     delays.append(float(line.split("\t")[3]))
     scans.append(int(line.split("\t")[2]))
 delays = np.array(delays, dtype=float)
@@ -312,9 +290,6 @@ for ii in range(0, len(delay_sort)):
 
 total_int = np.mean(intensities_mean_norm, axis=0)
 
-# =============================================================================
-# Display intensity evolution
-# =============================================================================
 
 plt.figure()
 plt.plot(delays, intensities_raw[8, :], "o")
@@ -328,7 +303,7 @@ for i in range(0, number_of_peaks):
 plt.xlabel("Delay $\Delta t$ [ps]")
 plt.ylabel("Relative Intensity $\Delta I_r$ [%]")
 plt.savefig(
-    "//nap1.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/Timetraces/timetraces.png",
+    os.path.join(DATA_DIR, "timetraces.png"),
     format="png",
 )
 plt.show()
@@ -338,16 +313,11 @@ plt.plot(delay_sort / 1000, total_int / total_int[0])
 plt.xlabel("Delay $\Delta t$ [ps]")
 plt.ylabel("Mean total intensity $\Delta I_r$ [%]")
 plt.savefig(
-    "//nap1.rz-berlin.mpg.de/hildebrandt/Masterarbeit/MoS2/Timetraces/total_int.png",
+    os.path.join(DATA_DIR, "total_intensities.png"),
     format="png",
 )
 plt.show()
 
-# =============================================================================
-# SAVE DATA
-# =============================================================================
-
-# Saving data in an npz file
 np.savez(
     DATA_DIR + "output_data_04_02_norm.npz",
     int_norm=intensities_norm,
