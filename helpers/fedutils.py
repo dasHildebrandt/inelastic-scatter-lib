@@ -1,5 +1,5 @@
 import numpy as np
-import numpy.matlib
+import pandas as pd
 import scipy
 from scipy.interpolate import interp1d
 import configparser
@@ -7,7 +7,8 @@ import tqdm
 import skued
 from scipy.stats import pearsonr
 import math as m
-import pandas as pd
+
+from helpers.tools import correct_image, center_of_mass
 
 
 def read_cfg(path_cfg):
@@ -66,38 +67,26 @@ def get_mask_image(
     return mask
 
 
-def refine_peakpos_arb_dim(peakpos_all, image, numrefine, window_size):
-    new_peakpos_all = np.empty_like(peakpos_all)
-    for idx, peak in enumerate(peakpos_all):
-        lbx = int(peak[1]) - window_size
-        ubx = int(peak[1]) + window_size
-        lby = int(peak[0]) - window_size
-        uby = int(peak[0]) + window_size
-        im_p = image[lby:uby, lbx:ubx]
-        im_p = np.array(im_p, dtype=np.int64)
-        im_p = im_p / np.max(np.abs(im_p))
-        cy, cx = scipy.ndimage.measurements.center_of_mass(np.power(im_p, 2))
+def refine_peak_positions(
+    peak_positions: pd.DataFrame, image: np.ndarray, window_size: int
+) -> pd.DataFrame:
+    peak_positions_image = []
+    for index, peak in peak_positions.iterrows():
+        window_width = int(peak.roi)
+        miller_index = peak.miller_index
 
-        new_peak = new_peakpos_all[idx, :]
-        new_peak[1] = cx + peak[1] - window_size + 0.5
-        new_peak[0] = cy + peak[0] - window_size + 0.5
+        xlb = int(peak.x) - window_width
+        xub = int(peak.x) + window_width
+        ylb = int(peak.y) - window_width
+        yub = int(peak.y) + window_width
 
-        counter = 0
-        while counter < numrefine:
-            lbx = int(new_peak[1]) - window_size
-            ubx = int(new_peak[1]) + window_size
-            lby = int(new_peak[0]) - window_size
-            uby = int(new_peak[0]) + window_size
-            im_p = image[lby:uby, lbx:ubx]
-            cy, cx = scipy.ndimage.measurements.center_of_mass(np.power(im_p, 2))
-            counter = counter + 1
+        x = np.arange(xlb, xub, 1)
+        y = np.arange(ylb, yub, 1)
 
-            new_peak[1] = cx + new_peak[1] - window_size - 1
-            new_peak[0] = cy + new_peak[0] - window_size - 1
-
-        new_peakpos_all[idx, 0] = new_peak[0]
-        new_peakpos_all[idx, 1] = new_peak[1]
-    return new_peakpos_all
+        peak_image = image[xlb:xub, ylb:yub]
+        xpos, ypos = center_of_mass(peak_image, x, y)
+        peak_positions_image.append((xpos, ypos))
+    return peak_positions_image
 
 
 def centeredDistanceMatrix(n):
@@ -220,30 +209,26 @@ def sum_peak_pixels(image, peak, window_size):
     return np.nansum(im_p)
 
 
-def peakpos_evolution(
-    file_list, mask_total, laser_bkg, FF, peakpos_all, numrefine, window_size
-):
-    peakpos_evolution = []
-    no_files = len(file_list)
-    no_peaks = np.shape(peakpos_all)[0]
-    for idx, f in tqdm.tqdm(enumerate(file_list)):
-        image = np.array(skued.diffread(f), dtype=np.int64)
-        # checks for saturation
-        # if nanmax(nanmax(Image))==65000
-        #    msgbox(['Warning: Image ',num2str(k),' is saturated!'])
-        #    end
-        # Apply mask
-        image = image * mask_total
-        # Substract background and flatfield
-        image = remove_bgk(image, laser_bkg, FF)
-        new_peakpos_all = refine_peakpos_arb_dim(
-            peakpos_all, image, numrefine, window_size
+def get_peak_position_evolution(
+    diffraction_image_files: list[str],
+    mask_total: np.ndarray,
+    background_file: str,
+    flatfield_file: str,
+    peak_positions: pd.DataFrame,
+    window_size: int,
+) -> pd.DataFrame:
+    peak_position_evolution = pd.DataFrame()
+    for k, image_file in tqdm.tqdm(enumerate(diffraction_image_files)):
+        image = correct_image(
+            image_file=image_file,
+            background_file=background_file,
+            flatfield_file=flatfield_file,
         )
-        peakpos_evolution.append(new_peakpos_all)
-        peakpos_all = new_peakpos_all
-
-    peakpos_evolution = np.array(peakpos_evolution).reshape(no_files, 2 * no_peaks)
-    return peakpos_evolution
+        image = image * mask_total
+        peak_position_evolution[k] = refine_peak_positions(
+            peak_positions=peak_positions, image=image, window_size=window_size
+        )
+    return peak_position_evolution
 
 
 def normalize_pearson(signal_intensity, total_counts, tolerance=1e-15, max_steps=10000):

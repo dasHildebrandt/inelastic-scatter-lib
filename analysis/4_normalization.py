@@ -32,38 +32,34 @@ from helpers.fedutils import (
     remove_bgk,
     read_cfg,
     sum_peak_pixels,
-    peakpos_evolution,
-    refine_peakpos_arb_dim,
+    get_peak_position_evolution,
+    refine_peak_positions,
     normalize_pearson,
 )
+from helpers.tools import correct_image
 
 
 # Load Config
 
-PATH_CFG = os.path.join(DATA_DIR, "config_2020_19_07.cfg")
-dict_path, dict_numerics = read_cfg(PATH_CFG)
-LOG = os.path.join(DATA_DIR, dict_path["path_log"])
-PATH = os.path.join(DATA_DIR, dict_path["path"])
+configuration_file = os.path.join(DATA_DIR, "config_2020_19_07.cfg")
+dict_path, dict_numerics = read_cfg(configuration_file)
+log_file = os.path.join(DATA_DIR, dict_path["path_log"])
+diffraction_data_path = os.path.join(DATA_DIR, dict_path["path"])
 
 partial = dict_numerics["partial"]
 if partial == 1:
-    diffraction_images = glob.glob(os.path.join(PATH, "*.tif"))[
+    diffraction_images = glob.glob(os.path.join(diffraction_data_path, "*.tif"))[
         : dict_numerics["to_file"]
     ]
 else:
-    diffraction_images = glob.glob(os.path.join(PATH, "*.tif"))
+    diffraction_images = glob.glob(os.path.join(diffraction_data_path, "*.tif"))
 number_of_diffraction_images = len(diffraction_images)
 print(f"Number of diffraction images used: {number_of_diffraction_images}")
 
-# %%
-# Loads flatfield
-PATH_FF = os.path.join(DATA_DIR, dict_path["path_ff"])
-FFmat = spio.loadmat(PATH_FF)
-FF = FFmat["FF"]
+flatfield_file = os.path.join(DATA_DIR, dict_path["path_ff"])
 
 # Loads initial peak positions
 peak_positions = pd.read_csv(os.path.join(DATA_DIR, "peak_positions.csv"))
-peak_positions = list(zip(peak_positions["y_result"], peak_positions["x_result"]))
 number_of_peaks = len(peak_positions)
 print(f"Loaded {number_of_peaks} Bragg peak positions.")
 
@@ -74,29 +70,42 @@ cen_res = np.loadtxt(os.path.join(DATA_DIR, CRPATH), dtype=float, skiprows=1)
 center = cen_res[0, 0:2]
 
 # Loads laser background
-PATH_BKG = dict_path["path_bkg"]
-LASER_BKG = np.array(skued.diffread(os.path.join(DATA_DIR, PATH_BKG)), dtype=np.float64)
+background_file = os.path.join(DATA_DIR, dict_path["path_bkg"])
+LASER_BKG = np.array(
+    skued.diffread(os.path.join(DATA_DIR, background_file)), dtype=np.float64
+)
 
-# %%
 # Loads parameters
 window_size_intensity = dict_numerics["window_size_intensity"]
 window_size_background_peaks = dict_numerics["window_size_background_peaks"]
 mask_size_zero_order = dict_numerics["mask_size_zero_order"]
 max_distance = dict_numerics["max_distance"]
 
-# Creating dummy image for displaying masks etc
-dummy = np.array(skued.diffread(diffraction_images[1]), dtype=np.int64)
-dummy_bkg = remove_bgk(dummy, LASER_BKG, FF)
+# Creating dummy image for displaying masks
+dummy = correct_image(
+    image_file=diffraction_images[1],
+    background_file=background_file,
+    flatfield_file=flatfield_file,
+)
 
 # %% Loads masks
 path_mask = os.path.join(DATA_DIR, dict_path["path_mask"])
 mask_total = spio.loadmat(path_mask)["mask_total"]
 mask_zero_order = (
-    get_mask_image(dummy.shape, [center], [mask_size_zero_order]) * mask_total
+    get_mask_image(
+        mask_size=dummy.shape,
+        center_positions=[center],
+        list_of_radii=[mask_size_zero_order],
+    )
+    * mask_total
 )
 masked_bragg = (
     get_mask_image(
-        dummy.shape, peak_positions, window_size_intensity * np.ones(number_of_peaks)
+        mask_size=dummy.shape,
+        center_positions=list(
+            zip(peak_positions["y_result"], peak_positions["x_result"])
+        ),
+        list_of_radii=window_size_intensity * np.ones(number_of_peaks),
     )
     * mask_zero_order
 )
@@ -104,37 +113,38 @@ masked_total_counts = (
     get_mask_image(dummy.shape, [center], [max_distance], True) * mask_zero_order
 )
 masked_dyn_bg = get_mask_image(
-    dummy.shape, peak_positions, window_size_background_peaks * np.ones(number_of_peaks)
-)  # *mask_zero_order
+    mask_size=dummy.shape,
+    center_positions=list(zip(peak_positions["y_result"], peak_positions["x_result"])),
+    list_of_radii=window_size_background_peaks * np.ones(number_of_peaks),
+)
 
 # %% Loads peak positions
-PATH_PEAKPOS = os.path.join(DATA_DIR, dict_path["peak_pos"])
-exists = os.path.isfile(PATH_PEAKPOS)
+peak_position_evolution_file = os.path.join(DATA_DIR, dict_path["peak_pos"])
 
-if not exists:
-    print("First need to generate peak position file...")
-    PEAK_POS = peakpos_evolution(
-        diffraction_images,
-        mask_total,
-        LASER_BKG,
-        FF,
-        peak_positions,
-        dict_numerics["lens_corr_repetitions"],
-        dict_numerics["lens_corr_window_size"],
-    )
-    np.savetxt(PATH_PEAKPOS, PEAK_POS, header="No peaks)")
-    PEAK_POS = PEAK_POS.reshape((number_of_diffraction_images, number_of_peaks, 2))
-    dict_numerics["calculate_peak_evolution"] = 0
+if os.path.exists(peak_position_evolution_file):
+    peak_position_evolution = pd.read_csv(peak_position_evolution_file)
 else:
-    if exists:
-        PEAK_POS = np.loadtxt(PATH_PEAKPOS)
+    print("Creating peak position file...")
+    peak_position_evolution = get_peak_position_evolution(
+        diffraction_image_files=diffraction_images,
+        mask_total=mask_total,
+        background_file=background_file,
+        flatfield_file=flatfield_file,
+        peak_positions=peak_positions,
+        window_size=dict_numerics["lens_corr_window_size"],
+    )
+    peak_position_evolution.to_csv(
+        os.path.join(DATA_DIR, "peak_position_evolution.csv"), index=False
+    )
+
+# %%
 
 # Path for saving output file
 PATH_OUTPUT = (
-    PATH
+    diffraction_data_path
     + dict_path["path_output"]
     + "/output_norm04_"
-    + PATH_CFG.split("/")[-1].split(".")[0]
+    + configuration_file.split("/")[-1].split(".")[0]
     + ".txt"
 )
 
@@ -176,8 +186,6 @@ ax4.set_title("Bragg peaks windows")
 ax5.set_title("Mask for total e counts")
 ax6.set_title("Mask for dynamical background")
 lim = 800
-# plt.xlim(center[1][0] - lim, center[1][0] + lim)
-# plt.ylim(center[0][0] - lim, center[0][0] + lim)
 plt.tight_layout()
 plt.show()
 plt.savefig(
@@ -191,7 +199,7 @@ plt.savefig(
 # =============================================================================
 
 # Get tif files from data set dir
-fn = glob.glob(PATH + "*.tif")  # get file list
+fn = glob.glob(diffraction_data_path + "*.tif")  # get file list
 num_img = len(fn)
 for k in range(0, len(fn)):
     fn[k] = os.path.basename(fn[k])
@@ -214,7 +222,7 @@ else:
     intensities_raw = np.zeros((number_of_peaks, len(fn[0:partial])))
 
     for idx, bn in tqdm.tqdm(enumerate(fn[0:partial])):
-        image = np.array(skued.diffread(PATH + bn), dtype=np.int64)
+        image = np.array(skued.diffread(diffraction_data_path + bn), dtype=np.int64)
         # checks for saturation
         if np.nanmax(np.nanmax(image)) == 65000:
             print("Warning: Image " + str(k) + " is saturated!")
@@ -268,7 +276,7 @@ for k in range(0, np.size(intensities_raw, axis=0)):
 intensities_norm = np.array(intensities_norm, dtype=float)
 
 # Read log file. Get delays, filenames and scans
-with open(PATH + LOG, "rt") as meta:
+with open(diffraction_data_path + log_file, "rt") as meta:
     lines = meta.readlines()
 del lines[0]
 
