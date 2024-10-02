@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 import skued
 import scipy.io as spio
-import pylab as plt
+import matplotlib.pyplot as plt
 from PIL import Image
 
 from helpers.fedutils import (
@@ -126,7 +126,7 @@ peak_position_evolution_file = os.path.join(DATA_DIR, dict_path["peak_pos"])
 
 if os.path.exists(peak_position_evolution_file):
     peak_position_evolution = pd.read_csv(peak_position_evolution_file)
-    peak_position_evolution = peak_position_evolution.applymap(ast.literal_eval)
+    peak_position_evolution = peak_position_evolution.map(ast.literal_eval)
 else:
     print("Creating peak position file...")
     peak_position_evolution = get_peak_position_evolution(
@@ -142,60 +142,38 @@ else:
     )
 
 # %% Path for saving output file
-PATH_OUTPUT = (
-    diffraction_data_path
-    + dict_path["path_output"]
-    + "/output_norm04_"
-    + configuration_file.split("/")[-1].split(".")[0]
-    + ".txt"
-)
+out_file = os.path.join(DATA_DIR, f"normalized_timetraces_{os.path.splitext(os.path.basename(config_file))[0]}.csv")
 
 # %% Display images with masks
+
 cmap = "inferno"
 b = 2
-fig, ((ax1, ax2, ax3), (ax4, ax5, ax6)) = plt.subplots(
-    nrows=2, ncols=3, figsize=(9, 6), sharex=True, sharey=True
-)
-ax1.pcolormesh(dummy, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap)
-ax2.pcolormesh(dummy_bkg, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap)
-ax3.pcolormesh(dummy_bkg * b, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap)
+fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(9, 6), sharex=True, sharey=True)
+vmax = 0.1 * np.nanmax(np.abs(dummy))
+plots = [
+    (axs[0, 0], dummy, "Original"),
+    (axs[0, 1], dummy_bkg, "Laser background removed"),
+    (axs[0, 2], dummy_bkg * b, "Background without laser"),
+    (axs[1, 0], dummy_bkg * masked_bragg, "Bragg peaks windows"),
+    (axs[1, 1], dummy_bkg * masked_total_counts, "Mask for total electron counts"),
+    (axs[1, 2], dummy_bkg * masked_dyn_bg, "Mask for dynamical background"),
+]
 
-ax4.pcolormesh(
-    dummy_bkg * masked_bragg, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap
-)
+for ax, data, title in plots:
+    ax.pcolormesh(data, vmin=0, vmax=vmax, cmap=cmap)
+    ax.set_title(title)
+    ax.axis("off")
+
 for idp, pp in peak_positions.iterrows():
-    ax4.plot(pp.y, pp.x, marker="x", markersize=4, color="r")
-    ax4.text(pp.y - 10, pp.x - 10, str(idp), color="r")
-ax5.pcolormesh(
-    dummy_bkg * masked_total_counts,
-    vmin=-0,
-    vmax=0.1 * np.nanmax(np.abs(dummy)),
-    cmap=cmap,
-)
-ax6.pcolormesh(
-    dummy_bkg * masked_dyn_bg, vmin=-0, vmax=0.1 * np.nanmax(np.abs(dummy)), cmap=cmap
-)
+    axs[1, 0].plot(pp.y, pp.x, marker="x", markersize=4, color="r")
+    axs[1, 0].text(pp.y - 10, pp.x - 10, str(idp), color="r")
 
-for ax in (ax1, ax2, ax3, ax4, ax5, ax6):
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-
-ax1.set_title("Original")
-ax2.set_title("Laser background removed")
-ax3.set_title("Background without_laser")
-ax4.set_title("Bragg peaks windows")
-ax5.set_title("Mask for total electron counts")
-ax6.set_title("Mask for dynamical background")
-lim = 800
 plt.tight_layout()
+output_path = os.path.join(DATA_DIR, "masks.png")
+plt.savefig(output_path, format="png")
 plt.show()
-plt.savefig(
-    os.path.join(DATA_DIR, "masks.png"),
-    format="png",
-)
 
 # %% START ANALYSIS
-# Old data is loaded when not deleted.
 
 if os.path.exists(DATA_DIR + "output_data_04.npz"):
     npzfile = np.load(DATA_DIR + "output_data_04.npz")
@@ -227,22 +205,21 @@ else:
                 image, peak, window_size_intensity
             )
 
-# Saving data in an npz file
-np.savez(
-    DATA_DIR + "output_data_04.npz",
-    pp_evo=peak_position_evolution,
-    int_raw=intensities_raw,
-    tc=total_counts,
-)
+    np.savez(
+        os.path.join(DATA_DIR, "output_data_04.npz"),
+        pp_evo=peak_position_evolution,
+        int_raw=intensities_raw,
+        tc=total_counts,
+    )
 
-#%% Display total counts and peakpos evolution
+# %% Display total counts and peakpos evolution
 plt.figure()
 plt.plot(np.arange(len(total_counts)), total_counts)
 plt.xlabel("Image number [#]")
 plt.ylabel("Total counts [#]")
 plt.show()
 
-#%%  Normalize dataset via minimizing correlation of NOE
+# %%  Normalize dataset via minimizing correlation of NOE
 offset, corr_int = normalize_pearson(
     np.mean(intensities_raw, axis=0), total_counts, tolerance=1e-15, max_steps=10000
 )
