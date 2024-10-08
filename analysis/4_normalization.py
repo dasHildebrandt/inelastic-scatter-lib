@@ -231,7 +231,7 @@ for k in range(0, np.size(intensities_raw, axis=0)):
 intensities_norm = np.array(intensities_norm, dtype=float)
 
 # Read log file. Get delays, filenames and scans
-with open(diffraction_data_path + log_file, "rt") as meta:
+with open(log_file, "rt") as meta:
     lines = meta.readlines()
 del lines[0]
 
@@ -263,7 +263,6 @@ for ii in range(0, len(delay_sort)):
             ),
         )
     )
-    # binned_int_err(ii,:)=std(fit_int_norm(temp_ind,:),1)
 
 total_int = np.mean(intensities_mean_norm, axis=0)
 
