@@ -3,8 +3,6 @@
 
 This script uses parameters of q-space maps to bin intensities at a previously 
 defined k-path coming from 'Quantum Espresso' DFPT calculations.
-
-@author: Patrick Hildebrandt
 """
 # %%
 import sys, os

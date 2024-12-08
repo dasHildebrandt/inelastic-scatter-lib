@@ -5,12 +5,6 @@ Returns adjusted peak positions of Bragg peaks in a diffraction pattern
 import sys, os
 from dotenv import load_dotenv
 
-load_dotenv()
-ROOT_DIR = os.getenv("ROOT_DIR")
-DATA_DIR = os.getenv("DATA_DIR")
-sys.path.append(ROOT_DIR)
-
-# %%
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,6 +12,11 @@ import scipy.optimize as opt
 
 from helpers import fitting
 from helpers.tools import center_of_mass, correct_image
+
+load_dotenv()
+ROOT_DIR = os.getenv("ROOT_DIR")
+DATA_DIR = os.getenv("DATA_DIR")
+sys.path.append(ROOT_DIR)
 
 # %%
 image_file = os.path.join(DATA_DIR, "meas2/meas2_0015.tif")

@@ -2,12 +2,6 @@
 import sys, os
 from dotenv import load_dotenv
 
-load_dotenv()
-ROOT_DIR = os.getenv("ROOT_DIR")
-DATA_DIR = os.getenv("DATA_DIR")
-sys.path.append(ROOT_DIR)
-
-from PIL import Image
 import sys
 from sklearn.metrics import r2_score
 import glob
@@ -16,23 +10,22 @@ import pylab as plt
 import pandas as pd
 import scipy.optimize as opt
 import math as m
-import scipy.io as sio
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from crystals import Crystal
 import helpers.fedutils as utils
 from helpers.tools import center_of_mass, correct_image, get_center
 
-# %%
-config_file = "config_2020_19_07.cfg"
-datapath = "meas2/"
-peak_positions_file = "peak_positions.csv"
-background_file = "laser_background/meas1_0039.tif"
-flatfield_file = "20180808_flatfield_improved_without_bad_pixel_mask.mat"
-cif_file = "MoS2_mp-1018809_conventional_standard.cif"
+load_dotenv()
+ROOT_DIR = os.getenv("ROOT_DIR")
+DATA_DIR = os.getenv("DATA_DIR")
+sys.path.append(ROOT_DIR)
+
 
 # %%
+config_file = "config_2020_19_07.cfg"
+peak_positions_file = "peak_positions.csv"
+
 dict_path, dict_numerics = utils.read_cfg(os.path.join(DATA_DIR, config_file))
 electron_energy = dict_numerics["electron_energy"]
 
@@ -41,7 +34,7 @@ peak_positions[["h", "k", "l"]] = peak_positions.miller_index.str.split(
     " ", expand=True
 ).astype(float)
 
-crystal = Crystal.from_cif(os.path.join(DATA_DIR, cif_file))
+crystal = Crystal.from_cif(os.path.join(DATA_DIR, dict_path["cif"]))
 peak_positions["scattering_vector"] = peak_positions[["h", "k", "l"]].apply(
     lambda row: row.iloc[0] * crystal.reciprocal_vectors[0]
     + row.iloc[1] * crystal.reciprocal_vectors[1]
@@ -55,7 +48,20 @@ peak_positions["scattering_vector_length"] = (
 center = get_center(peak_positions=peak_positions)
 
 
-def Nxy(xdata_tuple, a, b, c, d, e):
+def Nxy(xdata_tuple, a: float, b: float, c: float, d: float, e: float):
+    """_summary_
+
+    Args:
+        xdata_tuple (_type_): _description_
+        a (_type_): _description_
+        b (_type_): _description_
+        c (_type_): _description_
+        d (_type_): _description_
+        e (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     # squared function with tilded background
     (x, y) = xdata_tuple
     Nxy = a * (x**2 + y**2) + b + c * x + d * y + e * x * y
@@ -230,7 +236,7 @@ N = get_fit_show_Nxy(
 )
 # ------------------------------------------------------------------------------
 # %% Get tif files from data set dir
-files = glob.glob(os.path.join(DATA_DIR, datapath) + "*.tif")
+files = glob.glob(os.path.join(DATA_DIR, dict_path["path"]) + "*.tif")
 number_tif = len(files)
 
 # %%
@@ -261,8 +267,8 @@ for k in range(0, number_tif):
     print(f"File: {k} of {number_tif}")
     IMcor = correct_image(
         image_file=files[k],
-        background_file=os.path.join(DATA_DIR, background_file),
-        flatfield_file=os.path.join(DATA_DIR, flatfield_file),
+        background_file=os.path.join(DATA_DIR, dict_path["path_bkg"]),
+        flatfield_file=os.path.join(DATA_DIR, dict_path["path_ff"]),
     )
 
     positions = peak_positions.copy()
